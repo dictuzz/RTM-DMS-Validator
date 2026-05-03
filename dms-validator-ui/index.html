@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DMS Route Validator - RTM Portal</title>
+  
+  <!-- Font Inter dari Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- CDN Dependencies -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+
+  <style>
+    :root { 
+      --primary: #2563eb; --primary-hover: #1d4ed8; 
+      --success: #16a34a; --success-hover: #15803d; 
+      --warning: #d97706; --warning-hover: #b45309; 
+      --bg-color: #f3f4f6; --card-bg: #ffffff; 
+      --text-main: #111827; --text-muted: #64748b; 
+      --border-color: #e2e8f0;
+    }
+    
+    body { 
+      font-family: "Inter", system-ui, sans-serif; 
+      background: var(--bg-color); 
+      color: var(--text-main); 
+      padding: 40px 20px; 
+      line-height: 1.6; 
+      margin: 0;
+    }
+    
+    /* Layout Dua Kolom */
+    .layout-wrapper { 
+      max-width: 1280px; 
+      margin: auto; 
+      display: grid; 
+      grid-template-columns: 1fr; 
+      gap: 24px; 
+      align-items: start;
+    }
+    
+    @media (min-width: 1024px) {
+      .layout-wrapper { grid-template-columns: 2fr 1fr; }
+    }
+
+    .card { 
+      background: var(--card-bg); 
+      padding: 32px; 
+      border-radius: 16px; 
+      box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -2px rgba(0,0,0,0.05); 
+      border: 1px solid var(--border-color);
+    }
+    
+    /* Sidebar SOP (Sticky) */
+    .sidebar { position: sticky; top: 24px; }
+
+    h1 { margin-top: 0; margin-bottom: 8px; font-weight: 700; font-size: 24px; letter-spacing: -0.02em; }
+    .desc { color: var(--text-muted); font-size: 15px; margin-bottom: 24px; }
+
+    /* Drag and Drop Zone */
+    .drop-zone {
+      border: 2px dashed #cbd5e1;
+      border-radius: 12px;
+      padding: 40px 20px;
+      text-align: center;
+      background: #f8fafc;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      margin-bottom: 24px;
+    }
+    .drop-zone:hover, .drop-zone.dragover {
+      border-color: var(--primary);
+      background: #eff6ff;
+    }
+    .drop-zone svg { width: 48px; height: 48px; color: #94a3b8; margin-bottom: 12px; transition: color 0.2s; }
+    .drop-zone:hover svg, .drop-zone.dragover svg { color: var(--primary); }
+    .drop-zone-text { font-size: 15px; font-weight: 500; color: #475569; margin: 0; }
+    .drop-zone-sub { font-size: 13px; color: #94a3b8; margin-top: 4px; }
+    #file { display: none; } /* Sembunyikan input asli */
+
+    /* Buttons */
+    .btn-group { display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; }
+    button { 
+      padding: 12px 20px; border: none; border-radius: 8px; font-weight: 600; 
+      cursor: pointer; transition: all 0.2s; font-size: 14px; font-family: "Inter", sans-serif;
+      display: inline-flex; align-items: center; gap: 8px;
+    }
+    .primary { background: var(--primary); color: white; } 
+    .primary:hover:not(:disabled) { background: var(--primary-hover); transform: translateY(-1px); } 
+    .primary:disabled { background: #94a3b8; cursor: not-allowed; transform: none; }
+    .download { background: var(--success); color: white; } 
+    .download:hover { background: var(--success-hover); }
+    .warning-btn { background: var(--warning); color: white; } 
+    .warning-btn:hover { background: var(--warning-hover); }
+
+    /* Empty State & Skeleton Loading */
+    .empty-state { text-align: center; padding: 40px 20px; color: var(--text-muted); }
+    .empty-state svg { width: 64px; height: 64px; color: #cbd5e1; margin-bottom: 16px; }
+    
+    .skeleton-box { 
+      height: 48px; background: #e2e8f0; border-radius: 8px; margin-bottom: 12px; 
+      animation: pulse 1.5s infinite ease-in-out; 
+    }
+    @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
+
+    /* Status & Table */
+    .valid-msg { color: var(--success); font-weight: 700; font-size: 18px; display: flex; align-items: center; gap: 8px; } 
+    .invalid-msg { color: #dc2626; font-weight: 700; font-size: 18px; display: flex; align-items: center; gap: 8px; }
+    .success-box { background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; padding: 16px; border-radius: 8px; margin-top: 16px; font-weight: 500; font-size: 15px;}
+    
+    .table-container { overflow-x: auto; margin-top: 20px; border-radius: 8px; border: 1px solid var(--border-color); } 
+    table { width: 100%; border-collapse: collapse; text-align: left; font-size: 14px; background: white;} 
+    th, td { border-bottom: 1px solid var(--border-color); padding: 14px 16px; } 
+    th { background: #f8fafc; font-weight: 600; color: #475569; white-space: nowrap; }
+    tr:last-child td { border-bottom: none; }
+    
+    .err-yellow { background-color: #fef08a !important; color: #854d0e; } 
+    .err-red { background-color: #fecaca !important; color: #991b1b; } 
+    .err-magenta { background-color: #fbcfe8 !important; color: #831843; } 
+    .err-cyan { background-color: #a5f3fc !important; color: #164e63; } 
+    .err-orange { background-color: #fed7aa !important; color: #9a3412; }
+
+    /* SOP Styling Terkoreksi */
+    .rules { font-size: 14px; color: #334155; } 
+    .rules h2 { font-size: 18px; border-bottom: 1px solid var(--border-color); padding-bottom: 12px; margin-bottom: 20px; font-weight: 700;} 
+    .rules .section-title { display: block; margin-top: 24px; margin-bottom: 8px; font-weight: 700; color: var(--text-main); font-size: 15px;} 
+    .rules ul, .rules ol { margin-top: 4px; padding-left: 20px; } 
+    .rules li { margin-bottom: 8px; }
+    .rules b { font-weight: 700; color: var(--text-main); } /* b tetap menyamping */
+
+    /* Copy Badge */
+    .copy-badge {
+      background-color: #e0f2fe; color: #0369a1; padding: 2px 6px; border-radius: 4px;
+      font-family: monospace; font-weight: 700; cursor: pointer; position: relative;
+      transition: background-color 0.2s; display: inline-block;
+    }
+    .copy-badge:hover { background-color: #bae6fd; }
+    .copy-badge::after {
+      content: "Klik untuk salin"; position: absolute; bottom: 130%; left: 50%;
+      transform: translateX(-50%); background: #1f2937; color: #fff; font-size: 11px;
+      padding: 4px 8px; border-radius: 4px; opacity: 0; visibility: hidden; transition: 0.2s;
+      white-space: nowrap; font-family: "Inter", sans-serif; font-weight: 500; pointer-events: none;
+    }
+    .copy-badge:hover::after { opacity: 1; visibility: visible; }
+    .copy-badge.copied::after { content: "Tersalin! ✔"; background: var(--success); }
+  </style>
+</head>
+
+<body>
+
+<div class="layout-wrapper">
+  <!-- Kolom Kiri: Workspace Utama -->
+  <div class="main-workspace">
+    <div class="card">
+      <h1>DMS Route Validator</h1>
+      <div class="desc">Portal Cerdas RTM. Mendukung Auto-Header & Unmerge Data.</div>
+
+      <!-- Drag & Drop Zone -->
+      <div class="drop-zone" id="dropZone">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m6.75 12-3-3m0 0-3 3m3-3v6m-1.5-15H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+        </svg>
+        <p class="drop-zone-text" id="fileName">Tarik & Lepas file Excel di sini</p>
+        <p class="drop-zone-sub">atau klik untuk memilih file (.xls, .xlsx)</p>
+        <input type="file" id="file" accept=".xls,.xlsx,.csv">
+      </div>
+
+      <div class="btn-group">
+        <button class="primary" id="btnValidate" onclick="validate()">
+          <svg style="width:18px;height:18px;" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
+          Validasi Data
+        </button>
+        <button class="download" id="btnDownloadZip" style="display:none;" onclick="downloadSplitZip()">
+          <svg style="width:18px;height:18px;" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
+          Download Data Siap Inject (ZIP)
+        </button>
+        <button class="warning-btn" id="btnDownloadError" style="display:none;" onclick="downloadErrorLog()">
+          <svg style="width:18px;height:18px;" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" /></svg>
+          Download File Revisi (.xlsx)
+        </button>
+      </div>
+
+      <div id="status"></div>
+      <div id="result">
+        <!-- Empty State Default -->
+        <div class="empty-state" id="emptyState">
+          <svg fill="none" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M10.125 2.25h-4.5c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125v-9M10.125 2.25h.375a9 9 0 0 1 9 9v.375M10.125 2.25A3.375 3.375 0 0 1 13.5 5.625v1.5c0 .621.504 1.125 1.125 1.125h1.5a3.375 3.375 0 0 1 3.375 3.375M9 15l2.25 2.25L15 12" />
+          </svg>
+          <p>Belum ada data yang diproses.<br>Upload file Excel Anda dan klik Validasi Data.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Kolom Kanan: Sidebar SOP -->
+  <div class="sidebar">
+    <div class="card rules">
+      <h2>SOP PENGAJUAN DATA RUTE</h2>
+      
+      <span class="section-title">A. Ketentuan Pengajuan</span>
+      <ol>
+        <li>Pengajuan dilakukan via SPV pada minggu pertama (tanggal 1–7).</li>
+        <li>Update dikirim maksimal minggu kedua (tanggal 14).</li>
+        <li>Pengajuan wajib email ke: <br>
+          <span class="copy-badge" onclick="copyEmail(this)">m.shony@id-tirta.com</span> dan <br>
+          <span class="copy-badge" onclick="copyEmail(this)">benedictus.richard@id-tirta.com</span> <br>
+          CC: ASM, KPJ, dan SSD Manager.
+        </li>
+        <li>Wajib gunakan template resmi RTM.</li>
+        <li>SLA Pemrosesan 1–3 hari kerja.</li>
+      </ol>
+      
+      <span class="section-title">B. Aturan Pengisian Data</span>
+      <ol>
+        <li><b>Kelengkapan:</b> Seluruh sel wajib terisi, pantang kosong.</li>
+        <li><b>Jadwal:</b> Isi <b>1</b> (kunjungan) atau <b>0</b> (tidak ada, termasuk Minggu). Dilarang pakai strip (-) atau huruf O.</li>
+        <li><b>ID Sales:</b> Format baku Angka-Strip-Alfanumerik (Cth: 280-R024).</li>
+        <li><b>Konsistensi:</b> ID RUTE = ID SALES. Satu nama tidak boleh punya dua ID.</li>
+        <li><b>Nama Rute:</b> Harus persis data master.</li>
+        <li><b>Outlet:</b> ID PELANGGAN tidak boleh duplikat.</li>
+      </ol>
+      
+      <span class="section-title">C. Kamus Warna Log</span>
+      <ul>
+        <li><span style="background:#fef08a; padding:2px 6px; border-radius:4px; font-weight:700; color:#854d0e; font-size:12px;">Kuning</span> Sel dibiarkan kosong.</li>
+        <li><span style="background:#fecaca; padding:2px 6px; border-radius:4px; font-weight:700; color:#991b1b; font-size:12px;">Merah</span> ID Sales/Rute salah/inkonsisten.</li>
+        <li><span style="background:#fbcfe8; padding:2px 6px; border-radius:4px; font-weight:700; color:#831843; font-size:12px;">Ungu</span> Nama Rute tidak terdaftar.</li>
+        <li><span style="background:#a5f3fc; padding:2px 6px; border-radius:4px; font-weight:700; color:#164e63; font-size:12px;">Biru Muda</span> ID Pelanggan duplikat.</li>
+        <li><span style="background:#fed7aa; padding:2px 6px; border-radius:4px; font-weight:700; color:#9a3412; font-size:12px;">Oranye</span> Jadwal bukan angka 1 atau 0.</li>
+      </ul>
+
+      <button class="download" style="width: 100%; justify-content: center; margin-top: 16px;" onclick="downloadTemplate()">
+        Download Template RTM
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+// -- Fitur Copy Email --
+  function copyEmail(element) {
+    navigator.clipboard.writeText(element.innerText).then(() => {
+      element.classList.add("copied");
+      setTimeout(() => element.classList.remove("copied"), 2000);
+    }).catch(err => alert("Gagal menyalin teks."));
+  }
+
+  // -- Fitur Drag & Drop --
+  const dropZone = document.getElementById('dropZone');
+  const fileInput = document.getElementById('file');
+  const fileNameDisplay = document.getElementById('fileName');
+
+  dropZone.addEventListener('click', () => fileInput.click());
+  dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+  dropZone.addEventListener('dragleave', () => { dropZone.classList.remove('dragover'); });
+  dropZone.addEventListener('drop', (e) => {
+    e.preventDefault(); dropZone.classList.remove('dragover');
+    if (e.dataTransfer.files.length) { fileInput.files = e.dataTransfer.files; updateFileName(); }
+  });
+  fileInput.addEventListener('change', updateFileName);
+
+  function updateFileName() {
+    if (fileInput.files[0]) {
+      fileNameDisplay.innerHTML = `<span style="color:#2563eb; font-weight:700;">File terpilih:</span> ${fileInput.files[0].name}`;
+    } else {
+      fileNameDisplay.innerText = "Tarik & Lepas file Excel di sini";
+    }
+  }
+
+  // -- Logika Utama --
+  let globalExtractedData = [];
+  let globalErrors = [];
+  const ALL_HEADERS = ["ID RUTE", "NAMA RUTE", "TIPE RUTE", "ID SALES", "NAMA SALES", "ID PELANGGAN", "NAMA PELANGGAN", "SENIN", "SELASA", "RABU", "KAMIS", "JUMAT", "SABTU", "MINGGU", "MINGGU_1", "MINGGU_2", "MINGGU_3", "MINGGU_4"];
+  const DEPO_MAP = {
+    "260": "WPS 8260|Penggung", "261": "WPS 8261|Kanci", "262": "WPS 8262|Majalengka", "263": "WPS 8263|Kuningan", "264": "WPS 8264|Purwakarta", "265": "WPS 8265|Pamanukan", "266": "WPS 8266|Jatisari", "267": "WPS 8267|Jatibarang", "268": "WPS 8268|Tasikmalaya", "269": "WPS 8269|Banjarsari", "270": "WPS 8270|Garut", "271": "WPS 8271|Pangandaran", "280": "LP 7280|Bogor", "281": "LP 7281|Parung", "282": "LP 7282|Citeureup", "283": "LP 7283|Sentul", "284": "LP 7284|Sukabumi", "285": "LP 7285|Cianjur", "287": "LP 7286|Pelabuhan Ratu", "289": "LP 7287|Parung Panjang", "290": "LP 7288|Tapos", "902": "TUA 9902|Metro", "343": "TUA 9903|Padalarang", "30": "TUA 9904|Majalaya", "29": "TUA 9905|Lembang", "900": "TUA 9906|Sadakeling", "914": "TUA 9907|Soreang", "912": "TUA 9908|Cicalengka", "930": "TUA 9909|Sumedang", "904": "TUA 9910|Katapang", "344": "TUA 9911|Kasomalang"
+  };
+
+  function getErrorClass(col, msg) {
+    const lowerMsg = msg.toLowerCase();
+    if (lowerMsg.includes("kosong")) return { css: "err-yellow", hex: "FEF08A" };
+    if (lowerMsg.includes("format") || col === "ID RUTE" || lowerMsg.includes("inkonsisten")) return { css: "err-red", hex: "FECACA" };
+    if (col === "NAMA RUTE" || lowerMsg.includes("terdaftar")) return { css: "err-magenta", hex: "FBCFE8" };
+    if (col === "ID PELANGGAN" || lowerMsg.includes("duplikat")) return { css: "err-cyan", hex: "A5F3FC" };
+    if (lowerMsg.includes("mutlak") || lowerMsg.includes("1 atau 0")) return { css: "err-orange", hex: "FED7AA" };
+    return { css: "", hex: "FFFFFF" };
+  }
+
+  function showSkeleton() {
+    document.getElementById("result").innerHTML = `
+      <div style="margin-top:20px;">
+        <div class="skeleton-box" style="width: 100%;"></div>
+        <div class="skeleton-box" style="width: 100%;"></div>
+        <div class="skeleton-box" style="width: 70%;"></div>
+        <p style="text-align:center; color:#94a3b8; font-size:14px; margin-top:16px;">Sistem sedang mengekstrak dan memvalidasi baris data...</p>
+      </div>
+    `;
+  }
+
+  // Alias Mapper
+  function getStandardHeader(raw) {
+    const s = String(raw).toUpperCase().replace(/\s+/g, "");
+    if (s.includes("CUSTID") || s.includes("KODEPELANGGAN") || s.includes("IDPEL")) return "ID PELANGGAN";
+    if (s.includes("CUSTNAME") || s.includes("NAMATOKO")) return "NAMA PELANGGAN";
+    if (s.includes("KODESALES") || s.includes("SLSID") || s.includes("IDSALESMAN")) return "ID SALES";
+    if (s.includes("SLSNAME") || s.includes("NAMASALESMAN")) return "NAMA SALES";
+    if (s.includes("KODERUTE") || s.includes("ROUTEID")) return "ID RUTE";
+    if (s === "MINGGU1" || s === "W1") return "MINGGU_1";
+    if (s === "MINGGU2" || s === "W2") return "MINGGU_2";
+    if (s === "MINGGU3" || s === "W3") return "MINGGU_3";
+    if (s === "MINGGU4" || s === "W4") return "MINGGU_4";
+    return String(raw).toUpperCase().trim();
+  }
+
+  async function validate() {
+    const btn = document.getElementById("btnValidate");
+    const btnErr = document.getElementById("btnDownloadError");
+    const btnZip = document.getElementById("btnDownloadZip");
+    const statusDiv = document.getElementById("status");
+    const resultDiv = document.getElementById("result");
+
+    if (!fileInput.files[0]) return alert("Silakan pilih file Excel terlebih dahulu!");
+
+    btn.disabled = true; 
+    btn.innerHTML = `<svg style="width:18px;height:18px; animation: spin 1s linear infinite;" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> Memproses...`;
+    btnErr.style.display = "none"; btnZip.style.display = "none";
+    statusDiv.innerHTML = ""; showSkeleton();
+
+    const file = fileInput.files[0];
+    const reader = new FileReader();
+
+    reader.onload = async (e) => {
+      try {
+        // --- 1. PROSES BACA EXCEL DI FRONTEND ---
+        const data = new Uint8Array(e.target.result);
+        const wb = XLSX.read(data, { type: 'array' });
+        const sheet = wb.Sheets[wb.SheetNames[0]];
+
+        // Auto-Unmerge
+        if (sheet['!merges']) {
+          sheet['!merges'].forEach(range => {
+            const mainCell = sheet[XLSX.utils.encode_cell({ c: range.s.c, r: range.s.r })];
+            if (mainCell) {
+              for (let r = range.s.r; r <= range.e.r; r++) {
+                for (let c = range.s.c; c <= range.e.c; c++) {
+                  sheet[XLSX.utils.encode_cell({ c, r })] = mainCell;
+                }
+              }
+            }
+          });
+        }
+
+        const rawData = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+        
+        // Cari Header Dinamis
+        let headerRowIdx = 0;
+        for (let i = 0; i < rawData.length; i++) {
+          const rowStr = rawData[i].join("").toUpperCase();
+          if (rowStr.includes("PELANGGAN") || rowStr.includes("SALES")) {
+            headerRowIdx = i; break;
+          }
+        }
+
+        // Mapping Kolom
+        const colMap = {};
+        const headerRow = rawData[headerRowIdx];
+        for (let c = 0; c < headerRow.length; c++) {
+          const val = headerRow[c];
+          if (val) colMap[c] = getStandardHeader(val);
+        }
+
+        // Susun Payload
+        const extractedPayload = [];
+        for (let i = headerRowIdx + 1; i < rawData.length; i++) {
+          const rawRow = rawData[i];
+          if (rawRow.every(v => v === "")) continue;
+
+          const norm = { _originRow: i + 1 };
+          ALL_HEADERS.forEach(col => norm[col] = ""); 
+          
+          Object.keys(colMap).forEach(cIdx => {
+            const stdCol = colMap[cIdx];
+            if (ALL_HEADERS.includes(stdCol)) {
+              norm[stdCol] = rawRow[cIdx] !== undefined && rawRow[cIdx] !== null ? String(rawRow[cIdx]).trim() : "";
+            }
+          });
+          extractedPayload.push(norm);
+        }
+
+        // --- 2. TEMBAK DATA JSON KE BACKEND CLOUDFLARE ---
+        const res = await fetch("https://dms-validator-api.tuaproject.workers.dev", { 
+          method: "POST", 
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ data: extractedPayload })
+        });
+        
+        const resData = await res.json();
+        if(resData.error) throw new Error(resData.error);
+
+        globalExtractedData = resData.extractedData || [];
+        globalErrors = resData.errors || [];
+
+        // --- 3. TAMPILKAN HASIL ---
+        if (resData.status === "PASS") {
+          statusDiv.innerHTML = `<div class='valid-msg'><svg style="width:24px;height:24px;" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> Validasi Berhasil</div>`;
+          resultDiv.innerHTML = "<div class='success-box'>Data Anda 100% Valid. Sistem telah merapikan Header dan meng-unmerge data. Silakan unduh format ZIP siap Inject di bawah ini.</div>";
+          btnZip.style.display = "inline-flex";
+        } else {
+          statusDiv.innerHTML = `<div class='invalid-msg'><svg style="width:24px;height:24px;" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> Ditemukan ${resData.errors.length} Error</div>`;
+          btnErr.style.display = "inline-flex";
+          
+          let html = `<div class="table-container"><table><thead><tr><th>Baris Asli</th><th>Baris Mapping</th><th>Kolom</th><th>Deskripsi Error</th></tr></thead><tbody>`;
+          resData.errors.forEach(e => {
+            const colorMeta = getErrorClass(e.col, e.msg);
+            html += `<tr class="${colorMeta.css}">
+              <td><b>${e.row}</b></td>
+              <td>${e.mappedRow}</td>
+              <td><b>${e.col}</b></td>
+              <td>${e.msg}</td>
+            </tr>`;
+          });
+          html += `</tbody></table></div>`;
+          resultDiv.innerHTML = html;
+        }
+      } catch (error) {
+        console.error(error);
+        alert("Terjadi kesalahan sistem: " + error.message);
+        resultDiv.innerHTML = `<div class="empty-state"><p style="color:#dc2626;">Koneksi atau Pemrosesan gagal.</p></div>`;
+      } finally {
+        btn.disabled = false; 
+        btn.innerHTML = `<svg style="width:18px;height:18px;" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg> Validasi Data`;
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  async function downloadErrorLog() {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('RTM_CHECK');
+    worksheet.addRow(ALL_HEADERS);
+    worksheet.getRow(1).font = { bold: true };
+    globalExtractedData.forEach(rowObj => { worksheet.addRow(ALL_HEADERS.map(h => rowObj[h] || "")); });
+    globalErrors.forEach(err => {
+      const colIndex = ALL_HEADERS.indexOf(err.col) + 1;
+      const targetRow = worksheet.getRow(err.mappedRow);
+      const cell = targetRow.getCell(colIndex);
+      const hexColor = getErrorClass(err.col, err.msg).hex;
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + hexColor } };
+    });
+    const buffer = await workbook.xlsx.writeBuffer();
+    saveAs(new Blob([buffer]), "RTM_ERROR_LOG.xlsx");
+  }
+
+  async function downloadSplitZip() {
+    const zip = new JSZip();
+    const groups = {};
+    globalExtractedData.forEach(row => {
+      const idSales = row["ID SALES"];
+      if (!groups[idSales]) groups[idSales] = [];
+      groups[idSales].push(row);
+    });
+    const timestamp = new Date().toISOString().replace(/[-:T]/g,"").slice(0,14);
+    const parentFolder = zip.folder(`RUTE_${timestamp}`);
+    for (const idSales in groups) {
+      const dataRows = groups[idSales];
+      const namaSales = dataRows[0]["NAMA SALES"];
+      let depoCode = "NOT_FOUND";
+      if (idSales.includes("-")) depoCode = parseInt(idSales.split("-")[0], 10).toString();
+      let distCode = "UNKNOWN_DIST", depoArea = "UNKNOWN_DEPO";
+      if (DEPO_MAP[depoCode]) {
+        const parts = DEPO_MAP[depoCode].split("|");
+        distCode = parts[0]; depoArea = parts[1];
+      }
+      const fileName = `${distCode} - ${idSales} - ${namaSales}.xls`.replace(/[\/\:\\]/g, "_");
+      const wsData = [ALL_HEADERS];
+      dataRows.forEach(r => wsData.push(ALL_HEADERS.map(h => r[h] || "")));
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
+      const wbout = XLSX.write(wb, { bookType: 'biff8', type: 'array' });
+      parentFolder.folder(depoArea).file(fileName, wbout);
+    }
+    const content = await zip.generateAsync({ type: "blob" });
+    saveAs(content, `RUTE_INJECT_${timestamp}.zip`);
+  }
+
+  function downloadTemplate() { window.open("https://dms-validator-ui.pages.dev/TEMPLATE_RUTE.xls"); }
+</script>
+</body>
+</html>
